@@ -2,13 +2,14 @@
 """Utility to fetch recent AI-related articles from a collection of RSS feeds.
 
 Functions:
-- fetch_recent_articles(rss_feed_urls): returns list of recent article metadata
-- extract_article_text(url): downloads and extracts article full text via newspaper3k
+- fetch_recent_articles(rss_feed_urls, *, max_articles=None, max_per_domain=3, hours=24)
+- extract_article_text(url)
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
+from urllib.parse import urlparse
 
 # Import guards to give helpful messages if dependencies are missing
 try:  # feedparser for RSS parsing
@@ -56,24 +57,41 @@ def extract_article_text(url: str) -> str:
         print(f"Error extracting article from {url}: {e}")
         return ""
 
+# --- NEW HELPERS -----------------------------------------------------------
 
-def fetch_recent_articles(rss_feed_urls: List[str]) -> List[Dict[str, Any]]:
-    """Fetch articles from RSS feeds published in the last 24 hours.
+def _normalize_title(t: str) -> str:
+    return (t or "").strip().lower()
+
+def _domain(url: str) -> str:
+    try:
+        return urlparse(url).netloc.lower()
+    except Exception:
+        return ""
+
+# --- ENHANCED FETCH --------------------------------------------------------
+
+def fetch_recent_articles(
+    rss_feed_urls: List[str],
+    *,
+    max_articles: int | None = None,
+    max_per_domain: int = 3,
+    hours: int = 24,
+) -> List[Dict[str, Any]]:
+    """Fetch articles from RSS feeds within a recent time window with domain balancing.
 
     Args:
         rss_feed_urls: List of RSS feed URLs.
+        max_articles: Optional cap on total returned articles after balancing.
+        max_per_domain: Limit of articles per domain (post-dedup).
+        hours: Lookback window (default 24).
 
     Returns:
         List of article dicts (title, link, published (UTC string)).
     """
-    articles: List[Dict[str, Any]] = []
-
-    # Define the timezone for UTC
+    articles_raw: List[Dict[str, Any]] = []
     utc = pytz.UTC
-
-    # Time window
     now = datetime.now(utc)
-    twenty_four_hours_ago = now - timedelta(days=1)
+    window_start = now - timedelta(hours=hours)
 
     for url in rss_feed_urls:
         try:
@@ -81,50 +99,78 @@ def fetch_recent_articles(rss_feed_urls: List[str]) -> List[Dict[str, Any]]:
         except Exception as e:  # pragma: no cover
             print(f"Failed to parse feed {url}: {e}")
             continue
-
         for entry in getattr(feed, 'entries', []):
-            published_struct = None
-            if getattr(entry, 'published_parsed', None):
-                published_struct = entry.published_parsed
-            elif getattr(entry, 'updated_parsed', None):
-                published_struct = entry.updated_parsed
-
+            published_struct = getattr(entry, 'published_parsed', None) or getattr(entry, 'updated_parsed', None)
             if not published_struct:
                 continue
-
             try:
                 published_time = datetime(*published_struct[:6], tzinfo=utc)
-            except Exception:  # pragma: no cover
+            except Exception:
                 continue
+            if published_time < window_start:
+                continue
+            articles_raw.append({
+                'title': getattr(entry, 'title', 'No Title'),
+                'link': getattr(entry, 'link', ''),
+                'published': published_time.strftime('%Y-%m-%d %H:%M:%S %Z')
+            })
 
-            if published_time >= twenty_four_hours_ago:
-                articles.append({
-                    'title': getattr(entry, 'title', 'No Title'),
-                    'link': getattr(entry, 'link', ''),
-                    'published': published_time.strftime('%Y-%m-%d %H:%M:%S %Z')
-                })
+    if not articles_raw:
+        return []
 
-    return articles
+    # De-duplicate by link then by title
+    dedup_by_link: Dict[str, Dict[str, Any]] = {}
+    for a in articles_raw:
+        link_key = a['link'].strip()
+        if link_key and link_key not in dedup_by_link:
+            dedup_by_link[link_key] = a
+    # Fallback: if link missing, use title hash
+    title_based: Dict[str, Dict[str, Any]] = {}
+    for a in articles_raw:
+        if not a['link']:
+            tk = _normalize_title(a['title'])
+            if tk and tk not in title_based:
+                title_based[tk] = a
+    combined = list(dedup_by_link.values()) + list(title_based.values())
+
+    # Sort newest first
+    def _parsed_dt(a: Dict[str, Any]):
+        try:
+            return datetime.strptime(a['published'], '%Y-%m-%d %H:%M:%S %Z')
+        except Exception:
+            return datetime.min.replace(tzinfo=utc)
+    combined.sort(key=_parsed_dt, reverse=True)
+
+    # Domain balancing
+    domain_counts: Dict[str, int] = {}
+    balanced: List[Dict[str, Any]] = []
+    for a in combined:
+        dom = _domain(a['link'])
+        if dom:
+            cnt = domain_counts.get(dom, 0)
+            if cnt >= max_per_domain:
+                continue
+            domain_counts[dom] = cnt + 1
+        balanced.append(a)
+        if max_articles and len(balanced) >= max_articles:
+            break
+
+    return balanced
 
 
 if __name__ == '__main__':  # Smoke test run
     ai_news_feeds = [
         'https://openai.com/blog/rss.xml',
         'https://deepmind.google/blog/rss.xml',
-        'https://www.therundown.ai/rss',
         'https://www.kdnuggets.com/feed',
         'https://www.marktechpost.com/feed/',
         'https://pub.towardsai.net/feed',
         'http://bair.berkeley.edu/blog/feed.xml'
     ]
-
-    recent_articles = fetch_recent_articles(ai_news_feeds)
-
+    recent_articles = fetch_recent_articles(ai_news_feeds, max_articles=25, max_per_domain=3)
     if recent_articles:
-        print(f"Found {len(recent_articles)} new articles in the last 24 hours:")
+        print(f"Found {len(recent_articles)} balanced articles in the last 24 hours:")
         for article in recent_articles:
-            print(f"- Title: {article['title']}")
-            print(f"  Link: {article['link']}")
-            print(f"  Published: {article['published']}\n")
+            print(f"- [{_domain(article['link'])}] {article['title']}")
     else:
         print("No new articles found in the last 24 hours.")
