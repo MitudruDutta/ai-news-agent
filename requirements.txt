@@ -1,0 +1,13 @@
+feedparser>=6.0.11
+pytz>=2024.1
+newspaper3k>=0.2.8
+crewai>=0.51.0
+crewai-tools>=0.11.0
+python-dotenv>=1.0.1
+streamlit>=1.37.0
+gTTS>=2.5.1
+schedule>=1.2.1
+gensim>=4.3.0,<5.0.0
+openai>=1.35.0
+google-generativeai>=0.7.0
+lxml_html_clean>=0.2.0

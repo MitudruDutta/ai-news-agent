@@ -1,0 +1,115 @@
+# ==============================
+# AI News Agent Project .gitignore
+# ==============================
+# This file is generated to prevent committing secrets, build artifacts,
+# virtual environments, caches, and other transient or local-only files.
+# Adjust as needed for your workflow.
+
+# --- Environment & Secrets ---
+.env
+.env.*
+!.env.example
+secrets.*
+*.secret
+
+# --- Python Bytecode / Caches ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+
+# --- Virtual Environments ---
+venv/
+.venv/
+.envrc
+.envrc.local
+# Local project-specific venv (present in this repo)
+ai_news_agent/
+
+# --- Distribution / Packaging ---
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+MANIFEST
+
+# --- Tooling / Reports ---
+.mypy_cache/
+.pytype/
+.pytest_cache/
+.coverage
+coverage.*
+htmlcov/
+pytestdebug.log
+
+# --- Logs & Runtime Artifacts ---
+*.log
+logs/
+*.pid
+*.out
+*.err
+
+# --- Editors & IDE ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*.DS_Store
+Thumbs.db
+
+# --- Jupyter / IPython ---
+.ipynb_checkpoints/
+.profile
+
+# --- Streamlit ---
+.streamlit/
+# (If you add a secrets file separate from .env)
+.streamlit/secrets.toml
+
+# --- Cache / Temporary ---
+.cache/
+.tmp/
+tmp/
+*.tmp
+
+# --- Audio / Media Outputs ---
+*.mp3
+*.wav
+*.ogg
+ai_news_briefing.mp3
+
+# --- Generated Briefings / Exports ---
+briefings/
+exports/
+
+# --- Newspaper3k (if local caching enabled) ---
+cache_article/
+
+# --- OS Specific ---
+.DS_Store
+Desktop.ini
+
+# --- Misc ---
+*.bak
+*.orig
+*.rej
+*.swp
+*.swo
+
+# --- Ignore any accidental large data dumps ---
+/data/
+*.sqlite
+*.db
+
+# --- Node / Frontend (if ever added) ---
+node_modules/
+
+# --- Lock / State Files (uncomment if needed) ---
+# poetry.lock
+# Pipfile.lock
+
+# End of file
+
