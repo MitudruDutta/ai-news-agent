@@ -8,7 +8,7 @@ import requests
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import time
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote_plus
 import hashlib
 import json
 import os
@@ -18,6 +18,84 @@ from bs4 import BeautifulSoup
 import re
 import warnings
 import sys
+from dotenv import load_dotenv
+
+load_dotenv()
+
+REQUEST_TIMEOUT = float(os.getenv("NEWS_REQUEST_TIMEOUT", "12"))
+
+
+def _is_dns_error(exc: requests.exceptions.RequestException) -> bool:
+    message = str(exc).lower()
+    dns_markers = [
+        "getaddrinfo failed",
+        "name or service not known",
+        "failed to resolve",
+        "nodename nor servname provided",
+        "temporary failure in name resolution"
+    ]
+    return any(marker in message for marker in dns_markers)
+
+
+def _fetch_with_dns_fallback(url: str, params: Dict[str, Any], timeout: float = 10.0) -> tuple[Dict[str, Any], str]:
+    """Fetch JSON from URL; on DNS failure retry via r.jina.ai proxy.
+
+    Returns tuple of (json_data, mode) where mode is 'direct' or 'proxy'.
+    Raises original exception if both attempts fail.
+    """
+    try:
+        response = requests.get(url, params=params, timeout=timeout)
+        response.raise_for_status()
+        return response.json(), "direct"
+    except requests.exceptions.RequestException as exc:
+        if not _is_dns_error(exc):
+            raise
+
+        # Attempt fallback via r.jina.ai proxy to bypass local DNS issues
+        proxy_base = "https://r.jina.ai"
+        proxy_url = f"{proxy_base}/{url}"
+        try:
+            proxy_response = requests.get(proxy_url, params=params, timeout=timeout)
+            proxy_response.raise_for_status()
+            try:
+                return proxy_response.json(), "proxy"
+            except ValueError:
+                # Some proxies return text/plain despite JSON content
+                import json as _json
+                return _json.loads(proxy_response.text), "proxy"
+        except Exception as proxy_exc:
+            raise requests.exceptions.RequestException(
+                f"DNS resolution failed for {url} and proxy fallback also failed: {proxy_exc}"
+            ) from exc
+
+
+def _google_news_rss_fallback(query: str, max_results: int, source_tag: str) -> List[Dict[str, Any]]:
+    """Fetch articles via Google News RSS as a last-resort fallback."""
+    feed_url = (
+        "https://news.google.com/rss/search?q="
+        f"{quote_plus(query)}&hl=en-US&gl=US&ceid=US:en"
+    )
+    try:
+        feed = feedparser.parse(feed_url)
+        fallback_articles: List[Dict[str, Any]] = []
+        for entry in feed.entries[:max_results]:
+            published = entry.get('published_parsed')
+            if published:
+                published_iso = datetime(*published[:6]).isoformat()
+            else:
+                published_iso = datetime.now().isoformat()
+            fallback_articles.append({
+                'title': entry.get('title', 'No Title'),
+                'url': entry.get('link', ''),
+                'source': entry.get('source', {}).get('title', 'Google News'),
+                'published': published_iso,
+                'description': entry.get('summary', '')[:500],
+                'api_source': source_tag
+            })
+        return fallback_articles
+    except Exception as exc:
+        print(f"❌ Google News RSS fallback failed: {exc}")
+        return []
 
 try:
     from sources_config import (
@@ -111,9 +189,9 @@ def fetch_from_newsapi(query: str = "artificial intelligence", max_results: int 
             'from': (datetime.now() - timedelta(hours=24)).isoformat()
         }
 
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+        data, mode = _fetch_with_dns_fallback(url, params, timeout=REQUEST_TIMEOUT)
+        if mode == "proxy":
+            print("⚠️ NewsAPI direct call failed DNS. Using proxy fallback.")
 
         articles = []
         for article in data.get('articles', []):
@@ -128,16 +206,27 @@ def fetch_from_newsapi(query: str = "artificial intelligence", max_results: int 
                 'api_source': 'NewsAPI'  # Add metadata for tracking
             })
 
+        if not articles:
+            fallback_articles = _google_news_rss_fallback(query, max_results, 'NewsAPI_FALLBACK')
+            if fallback_articles:
+                print(f"⚠️ NewsAPI returned 0 articles. Using Google News RSS fallback ({len(fallback_articles)} items).")
+                return fallback_articles
+
         print(f"✓ Fetched {len(articles)} articles from NewsAPI")
         return articles
     except requests.exceptions.RequestException as e:
-        if "Failed to resolve" in str(e) or "Name or service not known" in str(e):
-            print(f"⚠️ NewsAPI unreachable (DNS/network issue). Continuing with other sources...")
-        else:
-            print(f"❌ Error fetching from NewsAPI: {e}")
+        print(f"❌ Error fetching from NewsAPI: {e}")
+        fallback_articles = _google_news_rss_fallback(query, max_results, 'NewsAPI_FALLBACK')
+        if fallback_articles:
+            print(f"⚠️ Using Google News RSS fallback. Retrieved {len(fallback_articles)} articles.")
+            return fallback_articles
         return []
     except Exception as e:
         print(f"❌ Error fetching from NewsAPI: {e}")
+        fallback_articles = _google_news_rss_fallback(query, max_results, 'NewsAPI_FALLBACK')
+        if fallback_articles:
+            print(f"⚠️ Using Google News RSS fallback. Retrieved {len(fallback_articles)} articles.")
+            return fallback_articles
         return []
 
 def fetch_from_serpapi(query: str = "artificial intelligence news", max_results: int = 20) -> List[Dict[str, Any]]:
@@ -157,9 +246,9 @@ def fetch_from_serpapi(query: str = "artificial intelligence news", max_results:
             'num': min(max_results, 100)
         }
 
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+        data, mode = _fetch_with_dns_fallback(url, params, timeout=REQUEST_TIMEOUT)
+        if mode == "proxy":
+            print("⚠️ SerpAPI direct call failed DNS. Using proxy fallback.")
 
         articles = []
         for item in data.get('news_results', []):
@@ -180,16 +269,27 @@ def fetch_from_serpapi(query: str = "artificial intelligence news", max_results:
                 'api_source': 'SerpAPI'  # Add metadata for tracking
             })
 
+        if not articles:
+            fallback_articles = _google_news_rss_fallback(query, max_results, 'SerpAPI_FALLBACK')
+            if fallback_articles:
+                print(f"⚠️ SerpAPI returned 0 articles. Using Google News RSS fallback ({len(fallback_articles)} items).")
+                return fallback_articles
+
         print(f"✓ Fetched {len(articles)} articles from SerpAPI")
         return articles
     except requests.exceptions.RequestException as e:
-        if "Failed to resolve" in str(e) or "Name or service not known" in str(e):
-            print(f"⚠️ SerpAPI unreachable (DNS/network issue). Continuing with other sources...")
-        else:
-            print(f"❌ Error fetching from SerpAPI: {e}")
+        print(f"❌ Error fetching from SerpAPI: {e}")
+        fallback_articles = _google_news_rss_fallback(query, max_results, 'SerpAPI_FALLBACK')
+        if fallback_articles:
+            print(f"⚠️ Using Google News RSS fallback for SerpAPI. Retrieved {len(fallback_articles)} articles.")
+            return fallback_articles
         return []
     except Exception as e:
         print(f"❌ Error fetching from SerpAPI: {e}")
+        fallback_articles = _google_news_rss_fallback(query, max_results, 'SerpAPI_FALLBACK')
+        if fallback_articles:
+            print(f"⚠️ Using Google News RSS fallback for SerpAPI. Retrieved {len(fallback_articles)} articles.")
+            return fallback_articles
         return []
 
 
@@ -287,9 +387,11 @@ def fetch_recent_articles(profile: str = 'balanced', max_articles: int = 50) -> 
         pass
 
     # Count articles by source
-    newsapi_count = len([a for a in unique_articles if a.get('api_source') == 'NewsAPI'])
-    serpapi_count = len([a for a in unique_articles if a.get('api_source') == 'SerpAPI'])
-    rss_count = len([a for a in unique_articles if not a.get('api_source')])
+    newsapi_sources = {'NewsAPI', 'NewsAPI_FALLBACK'}
+    serpapi_sources = {'SerpAPI', 'SerpAPI_FALLBACK'}
+    newsapi_count = len([a for a in unique_articles if a.get('api_source') in newsapi_sources])
+    serpapi_count = len([a for a in unique_articles if a.get('api_source') in serpapi_sources])
+    rss_count = len([a for a in unique_articles if a.get('api_source') not in newsapi_sources.union(serpapi_sources)])
     
     print(f"\n✅ Total unique articles fetched: {len(unique_articles)}")
     print(f"   └─ From RSS sources: {rss_count} articles")
