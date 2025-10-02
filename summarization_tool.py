@@ -38,7 +38,10 @@ llm_instance = None
 if USE_AI_SUMMARIZATION and GEMINI_KEY:
     try:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        llm_instance = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        llm_instance = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash-exp",
+            google_api_key=GEMINI_KEY
+        )
         llm_available = True
         print("✓ Using Gemini for AI summarization")
     except Exception as e:
