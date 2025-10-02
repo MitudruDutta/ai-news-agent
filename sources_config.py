@@ -1,4 +1,3 @@
-# file: sources_config.py
 """
 Dynamic news sources configuration with real-time API integration.
 Supports RSS feeds, web scraping, and API-based news aggregation.
@@ -7,6 +6,16 @@ Supports RSS feeds, web scraping, and API-based news aggregation.
 from typing import Dict, List, Any
 from datetime import datetime
 import os
+
+
+# Helper function for clean environment variable reading
+def get_env_clean(key: str, default: str = "") -> str:
+    """Get environment variable and strip quotes if present"""
+    value = os.getenv(key, default)
+    if value and isinstance(value, str):
+        value = value.strip("'\"")
+    return value
+
 
 # ==================== COMPREHENSIVE AI NEWS SOURCES ====================
 
@@ -105,24 +114,6 @@ INDUSTRY_SOURCES = {
         'type': 'rss',
         'weight': 8,
         'category': 'industry'
-    }
-}
-
-# Real-time API Sources (requires API keys)
-API_SOURCES = {
-    'news_api': {
-        'url': 'https://newsapi.org/v2/everything?q=AI&sortBy=publishedAt&apiKey=',
-        'type': 'news_api',
-        'weight': 12,  # Higher weight for real-time news
-        'category': 'api',
-        'api_key_env': 'NEWS_API_KEY'
-    },
-    'serper_api': {
-        'url': 'https://google.serper.dev/news?q=AI&type=news&apiKey=',
-        'type': 'serper_api',
-        'weight': 12,
-        'category': 'api',
-        'api_key_env': 'SERPER_API_KEY'
     }
 }
 
@@ -302,25 +293,25 @@ def get_source_urls(profile: str = 'balanced', source_type: str = None) -> List[
     return [s['url'] for s in sources.values()]
 
 
-# API Configuration for external services
+# API Configuration for external services (FIXED: Using get_env_clean)
 API_CONFIGS = {
     'newsapi': {
-        'enabled': bool(os.getenv('NEWSAPI_KEY')),
-        'api_key': os.getenv('NEWSAPI_KEY', ''),
+        'enabled': bool(get_env_clean('NEWSAPI_KEY')),
+        'api_key': get_env_clean('NEWSAPI_KEY'),
         'endpoint': 'https://newsapi.org/v2/everything',
         'query': 'artificial intelligence OR machine learning OR deep learning OR LLM OR GPT',
         'sort_by': 'publishedAt'
     },
     'serpapi': {
-        'enabled': bool(os.getenv('SERPAPI_KEY')),
-        'api_key': os.getenv('SERPAPI_KEY', ''),
+        'enabled': bool(get_env_clean('SERPAPI_KEY')),
+        'api_key': get_env_clean('SERPAPI_KEY'),
         'endpoint': 'https://serpapi.com/search',
         'engine': 'google_news',
         'query': 'AI news OR artificial intelligence news'
     },
     'bing_news': {
-        'enabled': bool(os.getenv('BING_NEWS_KEY')),
-        'api_key': os.getenv('BING_NEWS_KEY', ''),
+        'enabled': bool(get_env_clean('BING_NEWS_KEY')),
+        'api_key': get_env_clean('BING_NEWS_KEY'),
         'endpoint': 'https://api.bing.microsoft.com/v7.0/news/search',
         'query': 'artificial intelligence'
     }
@@ -350,8 +341,8 @@ CACHE_CONFIG = {
 # Content filtering
 FILTER_CONFIG = {
     'min_article_length': int(os.getenv('MIN_ARTICLE_LENGTH', '100')),
-    'max_articles_per_source': int(os.getenv('MAX_PER_SOURCE', '5')),
-    'lookback_hours': int(os.getenv('LOOKBACK_HOURS', '24')),
+    'max_articles_per_source': int(os.getenv('FEED_MAX_PER_DOMAIN', '5')),  # Fixed: was 'MAX_PER_SOURCE'
+    'lookback_hours': int(os.getenv('FEED_LOOKBACK_HOURS', '24')),  # Fixed: was 'LOOKBACK_HOURS'
     'exclude_keywords': os.getenv('EXCLUDE_KEYWORDS', '').split(','),
     'require_keywords': ['AI', 'artificial intelligence', 'machine learning', 'deep learning',
                          'neural network', 'LLM', 'GPT', 'model', 'algorithm'],
@@ -389,3 +380,9 @@ if __name__ == '__main__':
     print(f"  Developer: {len(DEVELOPER_SOURCES)}")
     print(f"\nAvailable profiles: {', '.join(PROFILE_MAP.keys())}")
     print(f"\nDefault profile 'balanced' has {get_active_sources_count('balanced')} sources")
+
+    # Show API status
+    print(f"\n API Status:")
+    for api_name, config in API_CONFIGS.items():
+        status = "✓ Enabled" if config['enabled'] else "❌ Disabled"
+        print(f"  {api_name}: {status}")
