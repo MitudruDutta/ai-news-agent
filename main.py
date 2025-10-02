@@ -316,9 +316,9 @@ class NewsAgentWorkflow:
             subject = f"{self.config['email_subject_prefix']} - {today_date}"
 
             success = send_email_briefing(
-                recipient=recipient,
-                subject=subject,
-                content=briefing
+                briefing_content=briefing,
+                recipient_email=recipient,
+                subject=subject
             )
 
             if success:
