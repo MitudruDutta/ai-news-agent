@@ -1,13 +1,65 @@
-feedparser>=6.0.11
-pytz>=2024.1
+# Core Dependencies
+streamlit>=1.30.0
+python-dotenv>=1.0.0
+
+# AI & Machine Learning (Gemini-only LLM stack retained)
+crewai>=0.28.8
+crewai-tools>=0.2.6
+langchain>=0.1.0
+langchain-community>=0.0.16
+langchain-google-genai>=0.0.7
+# Removed: langchain-openai, langchain-anthropic (Gemini-only setup)
+# Removed: google-generativeai (optional; langchain-google-genai covers usage)
+
+# News Fetching & Web Scraping
+feedparser>=6.0.10
+requests>=2.31.0
+beautifulsoup4>=4.12.2
+lxml>=5.1.0
 newspaper3k>=0.2.8
-crewai>=0.51.0
-crewai-tools>=0.11.0
-python-dotenv>=1.0.1
-streamlit>=1.37.0
-gTTS>=2.5.1
-schedule>=1.2.1
-gensim>=4.3.0,<5.0.0
-openai>=1.35.0
-google-generativeai>=0.7.0
-lxml_html_clean>=0.2.0
+# Legacy DuckDuckGo package (kept for compatibility)
+duckduckgo-search>=4.4.3
+# Preferred new DuckDuckGo client
+ddgs>=1.0.0
+
+# Audio Generation
+gtts>=2.5.0
+edge-tts>=6.1.10
+pyttsx3>=2.90
+elevenlabs>=0.2.26
+
+# Email
+secure-smtplib>=0.1.1
+
+# Scheduling & Time
+schedule>=1.2.0
+pytz>=2024.1
+
+# Data Processing
+pandas>=2.1.4
+numpy>=1.26.3
+
+# Utilities
+Pillow>=10.2.0
+python-dateutil>=2.8.2
+urllib3>=2.1.0
+certifi>=2023.11.17
+charset-normalizer>=3.3.2
+idna>=3.6
+
+# Testing & Development
+pytest>=7.4.4
+pytest-cov>=4.1.0
+black>=24.1.1
+flake8>=7.0.0
+mypy>=1.8.0
+
+# Optional: Advanced Features (commented out)
+# redis>=5.0.1
+# celery>=5.3.6
+# sentry-sdk>=1.40.0
+# prometheus-client>=0.19.0
+
+# Platform-specific hints
+# Windows: pywin32>=306
+# macOS: pyobjc>=10.1
