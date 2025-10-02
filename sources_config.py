@@ -7,6 +7,13 @@ from typing import Dict, List, Any
 from datetime import datetime
 import os
 
+try:
+    from dynamic_sources import get_dynamic_sources, force_source_refresh
+    DYNAMIC_SOURCES_AVAILABLE = True
+except ImportError:
+    DYNAMIC_SOURCES_AVAILABLE = False
+    print("⚠️ Dynamic sources module not available")
+
 
 # Helper function for clean environment variable reading
 def get_env_clean(key: str, default: str = "") -> str:
@@ -265,7 +272,23 @@ def get_sources_by_profile(profile: str = 'balanced') -> Dict[str, Dict[str, Any
     if env_profile in PROFILE_MAP:
         profile = env_profile
 
-    sources = PROFILE_MAP.get(profile, PROFILE_MAP['balanced'])
+    # Check if dynamic sources are enabled
+    use_dynamic = os.getenv('USE_DYNAMIC_SOURCES', 'true').lower() == 'true'
+    
+    if use_dynamic and DYNAMIC_SOURCES_AVAILABLE:
+        try:
+            # Get dynamically managed sources with automatic refresh
+            dynamic_sources = get_dynamic_sources(profile=profile)
+            print(f"✓ Using {len(dynamic_sources)} dynamic sources for profile '{profile}'")
+            
+            # Merge with static sources for redundancy
+            static_sources = PROFILE_MAP.get(profile, PROFILE_MAP['balanced'])
+            sources = {**static_sources, **dynamic_sources}
+        except Exception as e:
+            print(f"⚠️ Dynamic sources failed ({e}), falling back to static")
+            sources = PROFILE_MAP.get(profile, PROFILE_MAP['balanced'])
+    else:
+        sources = PROFILE_MAP.get(profile, PROFILE_MAP['balanced'])
 
     # Add custom sources from environment
     custom_sources = os.getenv('CUSTOM_NEWS_SOURCES', '')
