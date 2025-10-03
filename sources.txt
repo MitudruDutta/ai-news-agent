@@ -1,0 +1,48 @@
+# AI News RSS Sources Configuration
+# Add/remove sources here without modifying code
+# Format: source_id: RSS_URL
+
+# === AI Research Labs & Companies ===
+openai_blog: https://openai.com/blog/rss.xml
+anthropic_news: https://www.anthropic.com/news/rss
+deepmind_blog: https://deepmind.google/blog/rss.xml
+meta_ai: https://ai.meta.com/blog/rss/
+google_ai: https://blog.google/technology/ai/rss/
+microsoft_ai: https://blogs.microsoft.com/ai/feed/
+nvidia_blog: https://blogs.nvidia.com/feed/
+huggingface: https://huggingface.co/blog/feed.xml
+cohere_blog: https://cohere.com/blog/rss.xml
+
+# === Academic & Research ===
+mit_news: https://news.mit.edu/topic/artificial-intelligence2-rss
+stanford_hai: https://hai.stanford.edu/news/rss.xml
+berkeley_ai: https://bair.berkeley.edu/blog/feed.xml
+arxiv_ai: http://export.arxiv.org/rss/cs.AI
+arxiv_ml: http://export.arxiv.org/rss/cs.LG
+arxiv_cl: http://export.arxiv.org/rss/cs.CL
+
+# === Tech News & Media ===
+techcrunch_ai: https://techcrunch.com/category/artificial-intelligence/feed/
+venturebeat_ai: https://venturebeat.com/category/ai/feed/
+wired_ai: https://www.wired.com/feed/tag/ai/latest/rss
+the_verge_ai: https://www.theverge.com/ai-artificial-intelligence/rss/index.xml
+mit_tech_review: https://www.technologyreview.com/topic/artificial-intelligence/feed/
+arstechnica_ai: https://feeds.arstechnica.com/arstechnica/technology-lab
+zdnet_ai: https://www.zdnet.com/topic/artificial-intelligence/rss.xml
+
+# === Community & Newsletters ===
+aiweekly: https://aiweekly.co/feed/
+importai: https://jack-clark.net/feed/
+hackernews_ai: https://hnrss.org/newest?q=AI+OR+artificial+intelligence
+reddit_ml: https://www.reddit.com/r/MachineLearning/.rss
+reddit_artificial: https://www.reddit.com/r/artificial/.rss
+
+# === Developer Blogs ===
+towardsdatascience: https://towardsdatascience.com/feed
+kdnuggets: https://www.kdnuggets.com/feed
+machinelearningmastery: https://machinelearningmastery.com/feed/
+
+# === Additional Sources (Add your own below) ===
+# custom_source_1: https://example.com/feed.xml
+# custom_source_2: https://another-source.com/rss
+
