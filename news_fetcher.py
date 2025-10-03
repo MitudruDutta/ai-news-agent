@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 import re
 import warnings
 import sys
+import socket
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -38,35 +39,20 @@ def _is_dns_error(exc: requests.exceptions.RequestException) -> bool:
 
 
 def _fetch_with_dns_fallback(url: str, params: Dict[str, Any], timeout: float = 10.0) -> tuple[Dict[str, Any], str]:
-    """Fetch JSON from URL; on DNS failure retry via r.jina.ai proxy.
+    """Fetch JSON from URL with improved error handling.
 
-    Returns tuple of (json_data, mode) where mode is 'direct' or 'proxy'.
-    Raises original exception if both attempts fail.
+    Returns tuple of (json_data, mode) where mode is 'direct'.
+    Raises exception if connection fails - caller should handle with RSS fallback.
     """
     try:
         response = requests.get(url, params=params, timeout=timeout)
         response.raise_for_status()
         return response.json(), "direct"
     except requests.exceptions.RequestException as exc:
-        if not _is_dns_error(exc):
-            raise
-
-        # Attempt fallback via r.jina.ai proxy to bypass local DNS issues
-        proxy_base = "https://r.jina.ai"
-        proxy_url = f"{proxy_base}/{url}"
-        try:
-            proxy_response = requests.get(proxy_url, params=params, timeout=timeout)
-            proxy_response.raise_for_status()
-            try:
-                return proxy_response.json(), "proxy"
-            except ValueError:
-                # Some proxies return text/plain despite JSON content
-                import json as _json
-                return _json.loads(proxy_response.text), "proxy"
-        except Exception as proxy_exc:
-            raise requests.exceptions.RequestException(
-                f"DNS resolution failed for {url} and proxy fallback also failed: {proxy_exc}"
-            ) from exc
+        # Log the error and re-raise - let caller handle with RSS fallback
+        if _is_dns_error(exc):
+            print(f"⚠️ DNS resolution failed for {urlparse(url).netloc}")
+        raise
 
 
 def _google_news_rss_fallback(query: str, max_results: int, source_tag: str) -> List[Dict[str, Any]]:
@@ -190,8 +176,6 @@ def fetch_from_newsapi(query: str = "artificial intelligence", max_results: int 
         }
 
         data, mode = _fetch_with_dns_fallback(url, params, timeout=REQUEST_TIMEOUT)
-        if mode == "proxy":
-            print("⚠️ NewsAPI direct call failed DNS. Using proxy fallback.")
 
         articles = []
         for article in data.get('articles', []):
@@ -203,29 +187,29 @@ def fetch_from_newsapi(query: str = "artificial intelligence", max_results: int 
                 'description': article.get('description', ''),
                 'content': article.get('content', ''),
                 'author': article.get('author', 'Unknown'),
-                'api_source': 'NewsAPI'  # Add metadata for tracking
+                'api_source': 'NewsAPI'
             })
 
         if not articles:
-            fallback_articles = _google_news_rss_fallback(query, max_results, 'NewsAPI_FALLBACK')
+            fallback_articles = _fetch_from_dynamic_rss_sources(query, max_results)
             if fallback_articles:
-                print(f"⚠️ NewsAPI returned 0 articles. Using Google News RSS fallback ({len(fallback_articles)} items).")
+                print(f"⚠️ NewsAPI returned 0 articles. Using dynamic RSS fallback ({len(fallback_articles)} items).")
                 return fallback_articles
 
         print(f"✓ Fetched {len(articles)} articles from NewsAPI")
         return articles
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching from NewsAPI: {e}")
-        fallback_articles = _google_news_rss_fallback(query, max_results, 'NewsAPI_FALLBACK')
+        fallback_articles = _fetch_from_dynamic_rss_sources(query, max_results)
         if fallback_articles:
-            print(f"⚠️ Using Google News RSS fallback. Retrieved {len(fallback_articles)} articles.")
+            print(f"⚠️ Using dynamic RSS fallback. Retrieved {len(fallback_articles)} articles.")
             return fallback_articles
         return []
     except Exception as e:
         print(f"❌ Error fetching from NewsAPI: {e}")
-        fallback_articles = _google_news_rss_fallback(query, max_results, 'NewsAPI_FALLBACK')
+        fallback_articles = _fetch_from_dynamic_rss_sources(query, max_results)
         if fallback_articles:
-            print(f"⚠️ Using Google News RSS fallback. Retrieved {len(fallback_articles)} articles.")
+            print(f"⚠️ Using dynamic RSS fallback. Retrieved {len(fallback_articles)} articles.")
             return fallback_articles
         return []
 
@@ -247,8 +231,6 @@ def fetch_from_serpapi(query: str = "artificial intelligence news", max_results:
         }
 
         data, mode = _fetch_with_dns_fallback(url, params, timeout=REQUEST_TIMEOUT)
-        if mode == "proxy":
-            print("⚠️ SerpAPI direct call failed DNS. Using proxy fallback.")
 
         articles = []
         for item in data.get('news_results', []):
@@ -266,32 +248,31 @@ def fetch_from_serpapi(query: str = "artificial intelligence news", max_results:
                 'description': item.get('snippet', ''),
                 'content': item.get('snippet', ''),
                 'thumbnail': item.get('thumbnail', ''),
-                'api_source': 'SerpAPI'  # Add metadata for tracking
+                'api_source': 'SerpAPI'
             })
 
         if not articles:
-            fallback_articles = _google_news_rss_fallback(query, max_results, 'SerpAPI_FALLBACK')
+            fallback_articles = _fetch_from_dynamic_rss_sources(query, max_results)
             if fallback_articles:
-                print(f"⚠️ SerpAPI returned 0 articles. Using Google News RSS fallback ({len(fallback_articles)} items).")
+                print(f"⚠️ SerpAPI returned 0 articles. Using dynamic RSS fallback ({len(fallback_articles)} items).")
                 return fallback_articles
 
         print(f"✓ Fetched {len(articles)} articles from SerpAPI")
         return articles
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching from SerpAPI: {e}")
-        fallback_articles = _google_news_rss_fallback(query, max_results, 'SerpAPI_FALLBACK')
+        fallback_articles = _fetch_from_dynamic_rss_sources(query, max_results)
         if fallback_articles:
-            print(f"⚠️ Using Google News RSS fallback for SerpAPI. Retrieved {len(fallback_articles)} articles.")
+            print(f"⚠️ Using dynamic RSS fallback for SerpAPI. Retrieved {len(fallback_articles)} articles.")
             return fallback_articles
         return []
     except Exception as e:
         print(f"❌ Error fetching from SerpAPI: {e}")
-        fallback_articles = _google_news_rss_fallback(query, max_results, 'SerpAPI_FALLBACK')
+        fallback_articles = _fetch_from_dynamic_rss_sources(query, max_results)
         if fallback_articles:
-            print(f"⚠️ Using Google News RSS fallback for SerpAPI. Retrieved {len(fallback_articles)} articles.")
+            print(f"⚠️ Using dynamic RSS fallback for SerpAPI. Retrieved {len(fallback_articles)} articles.")
             return fallback_articles
         return []
-
 
 
 def parse_rss_feed(url: str, source_name: str = '') -> List[Dict[str, Any]]:
@@ -372,7 +353,7 @@ def fetch_recent_articles(profile: str = 'balanced', max_articles: int = 50) -> 
         )
         all_articles.extend(serpapi_articles)
 
-    # 5. REMOVE DUPLICATES
+    # 4. REMOVE DUPLICATES
     seen_urls = set()
     unique_articles = []
     for article in all_articles:
@@ -380,7 +361,7 @@ def fetch_recent_articles(profile: str = 'balanced', max_articles: int = 50) -> 
             seen_urls.add(article['url'])
             unique_articles.append(article)
 
-    # 6. SORT BY DATE
+    # 5. SORT BY DATE
     try:
         unique_articles.sort(key=lambda x: x.get('published', ''), reverse=True)
     except:
@@ -417,3 +398,64 @@ def extract_article_text(url: str) -> str:
         return text[:5000]
     except Exception as e:
         return f"Error extracting text: {str(e)}"
+
+def _fetch_from_dynamic_rss_sources(query: str, max_results: int) -> List[Dict[str, Any]]:
+    """Fetch articles from dynamically managed RSS sources as a fallback.
+    This provides real-time RSS reading instead of hardcoded Google News."""
+    try:
+        from dynamic_sources import get_dynamic_sources
+
+        print("📡 Using dynamic RSS sources as fallback...")
+        dynamic_sources = get_dynamic_sources(profile='balanced')
+
+        if not dynamic_sources:
+            print("⚠️ No dynamic sources available, falling back to Google News RSS")
+            return _google_news_rss_fallback(query, max_results, 'FALLBACK')
+
+        articles = []
+        sources_tried = 0
+        sources_succeeded = 0
+
+        # Try multiple RSS sources
+        for source_id, source_config in list(dynamic_sources.items())[:10]:
+            if source_config.get('type') != 'rss':
+                continue
+
+            sources_tried += 1
+            try:
+                feed = feedparser.parse(source_config['url'])
+                for entry in feed.entries[:5]:  # Get 5 from each source
+                    published = entry.get('published_parsed') or entry.get('updated_parsed')
+                    if published:
+                        published_iso = datetime(*published[:6]).isoformat()
+                    else:
+                        published_iso = datetime.now().isoformat()
+
+                    articles.append({
+                        'title': entry.get('title', 'No Title'),
+                        'url': entry.get('link', ''),
+                        'source': source_config.get('title', source_id),
+                        'published': published_iso,
+                        'description': entry.get('summary', '')[:500],
+                        'api_source': f'Dynamic_RSS_{source_id}'
+                    })
+                sources_succeeded += 1
+
+                if len(articles) >= max_results:
+                    break
+            except Exception as e:
+                continue
+
+        if articles:
+            print(f"✓ Fetched {len(articles)} articles from {sources_succeeded}/{sources_tried} dynamic RSS sources")
+            return articles[:max_results]
+        else:
+            print("⚠️ Dynamic RSS sources returned no articles, using Google News fallback")
+            return _google_news_rss_fallback(query, max_results, 'FALLBACK')
+
+    except ImportError:
+        print("⚠️ Dynamic sources module not available, using Google News fallback")
+        return _google_news_rss_fallback(query, max_results, 'FALLBACK')
+    except Exception as e:
+        print(f"⚠️ Dynamic RSS fallback failed: {e}, using Google News fallback")
+        return _google_news_rss_fallback(query, max_results, 'FALLBACK')
