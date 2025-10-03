@@ -30,42 +30,63 @@ MAX_SOURCES_PER_CATEGORY = int(os.getenv('MAX_SOURCES_PER_CATEGORY', '15'))
 # Curated RSS feed directories and discovery endpoints
 DISCOVERY_ENDPOINTS = {
     'ai_feeds': [
-        'https://raw.githubusercontent.com/kilimchoi/engineering-blogs/master/README.md',
-        'https://github.com/topics/artificial-intelligence',
+        # Direct RSS feeds from major AI research labs and companies
+        'https://openai.com/blog/rss.xml',
+        'https://deepmind.google/blog/rss.xml',
+        'https://blog.google/technology/ai/rss/',
     ],
     'rss_directories': [
-        'https://www.feedspot.com/infiniterss.php?_src=feed_directory&followfeedid=5014071',  # AI News
-        'https://www.alltop.com/tech/artificial-intelligence',
+        # Working RSS aggregators and directories
+        'https://hnrss.org/newest?q=AI+OR+artificial+intelligence',  # HN AI news
+        'https://www.reddit.com/r/MachineLearning/.rss',  # Reddit ML
+        'https://www.reddit.com/r/artificial/.rss',  # Reddit AI
     ],
     'trending_sources': [
-        'https://trends.google.com/trends/trendingsearches/daily/rss?geo=US',
-        'https://news.ycombinator.com/rss',
+        'https://news.ycombinator.com/rss',  # Hacker News front page
+        'https://hnrss.org/frontpage',  # Alternative HN RSS
+        'https://news.google.com/rss/search?q=artificial+intelligence&hl=en-US&gl=US&ceid=US:en',
+    ],
+    'tech_news': [
+        'https://techcrunch.com/category/artificial-intelligence/feed/',
+        'https://venturebeat.com/category/ai/feed/',
+        'https://www.wired.com/feed/tag/ai/latest/rss',
+    ],
+    'academic_sources': [
+        'http://export.arxiv.org/rss/cs.AI',  # ArXiv AI
+        'http://export.arxiv.org/rss/cs.LG',  # ArXiv ML
+        'https://news.mit.edu/topic/artificial-intelligence2-rss',
     ]
 }
 
-# Known high-quality AI news sources for bootstrapping
-SEED_SOURCES = {
-    'openai_blog': 'https://openai.com/blog/rss.xml',
-    'anthropic_news': 'https://www.anthropic.com/news/rss',
-    'deepmind_blog': 'https://deepmind.google/blog/rss.xml',
-    'meta_ai': 'https://ai.meta.com/blog/rss/',
-    'google_ai': 'https://blog.google/technology/ai/rss/',
-    'microsoft_ai': 'https://blogs.microsoft.com/ai/feed/',
-    'nvidia_blog': 'https://blogs.nvidia.com/feed/',
-    'huggingface': 'https://huggingface.co/blog/feed.xml',
-    'techcrunch_ai': 'https://techcrunch.com/category/artificial-intelligence/feed/',
-    'mit_news': 'https://news.mit.edu/topic/artificial-intelligence2-rss',
-    'stanford_hai': 'https://hai.stanford.edu/news/rss.xml',
-    'berkeley_ai': 'https://bair.berkeley.edu/blog/feed.xml',
-    'venturebeat_ai': 'https://venturebeat.com/category/ai/feed/',
-    'wired_ai': 'https://www.wired.com/feed/tag/ai/latest/rss',
-    'mit_tech_review': 'https://www.technologyreview.com/topic/artificial-intelligence/feed/',
-    'aiweekly': 'https://aiweekly.co/feed/',
-    'importai': 'https://jack-clark.net/feed/',
-    'the_verge_ai': 'https://www.theverge.com/ai-artificial-intelligence/rss/index.xml',
-    'towardsdatascience': 'https://towardsdatascience.com/feed',
-    'kdnuggets': 'https://www.kdnuggets.com/feed',
-}
+
+def get_seed_sources() -> Dict[str, str]:
+    """
+    Load seed sources from external configuration instead of hardcoding.
+    Priority: External file > Environment variable > Minimal fallback
+    """
+    try:
+        from external_source_loader import get_external_sources
+        sources = get_external_sources()
+        if sources:
+            return sources
+    except ImportError:
+        print("⚠️ External source loader not available, using fallback")
+    except Exception as e:
+        print(f"⚠️ Error loading external sources: {e}")
+
+    # Minimal fallback - only 5 most reliable sources
+    print("⚠️ Using minimal fallback sources (5 sources)")
+    return {
+        'openai_blog': 'https://openai.com/blog/rss.xml',
+        'deepmind_blog': 'https://deepmind.google/blog/rss.xml',
+        'arxiv_ai': 'http://export.arxiv.org/rss/cs.AI',
+        'techcrunch_ai': 'https://techcrunch.com/category/artificial-intelligence/feed/',
+        'hackernews_ai': 'https://hnrss.org/newest?q=AI+OR+artificial+intelligence',
+    }
+
+
+# Load seed sources dynamically
+SEED_SOURCES = get_seed_sources()
 
 # AI-related keywords for source validation
 AI_KEYWORDS = {
